@@ -71,9 +71,9 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
         {
             // No cache yet — show specific error
             string err = result.Error ?? "Unknown error";
-            _sessionItem.Title    = "⚡ Session";
+            _sessionItem.Title    = "Session";
             _sessionItem.Subtitle = err;
-            _weeklyItem.Title     = "📅 Weekly";
+            _weeklyItem.Title     = "Weekly";
             _weeklyItem.Subtitle  = err;
             return;
         }
