@@ -1,5 +1,5 @@
 # powertoys-claude-usage 
-# — Claude Usage for PowerToys Command Palette
+Claude Usage for PowerToys Command Palette
 
 **[한국어](#한국어) · [English](#english)**
 
