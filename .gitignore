@@ -1,0 +1,88 @@
+# ============================================================
+# Build outputs
+# ============================================================
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+Packages/
+
+# ============================================================
+# Visual Studio
+# ============================================================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vscode/
+
+# ============================================================
+# MSIX / Packaging — SENSITIVE
+# ============================================================
+# Code-signing certificates — NEVER commit private keys
+*.pfx
+*.p12
+*.cer
+*.pvk
+*.snk
+
+# Auto-generated MSIX artifacts
+BundleArtifacts/
+AppPackages/
+_pkginfo.txt
+*.appinstaller
+*.msix
+*.msixbundle
+*.appxrecipe
+
+# ============================================================
+# Generated source files
+# ============================================================
+Generated Files/
+*.g.cs
+*.g.i.cs
+
+# ============================================================
+# NuGet
+# ============================================================
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+packages/
+!*.[Pp]ackages.config
+
+# ============================================================
+# .NET / Rider / JetBrains
+# ============================================================
+.idea/
+*.DotSettings.user
+
+# ============================================================
+# OS
+# ============================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ============================================================
+# Claude Code local settings — contains machine-specific paths
+# ============================================================
+.claude/settings.local.json
+.claude/todos/
+
+# ============================================================
+# Secrets / Credentials — belt-and-suspenders
+# ============================================================
+*.env
+.env.*
+secrets.*
+*credentials*.json
+*secret*.json
+*token*.json
+appsettings.Development.json
