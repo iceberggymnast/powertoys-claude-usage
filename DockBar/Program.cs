@@ -16,6 +16,10 @@ public class Program
     {
         if (args.Length > 0 && args[0] == "-RegisterProcessAsComServer")
         {
+            using var mutex = new Mutex(true, "Global\\DockBarClaudeUsage_ComServer", out bool createdNew);
+            if (!createdNew)
+                return;
+
             await using ComServer server = new();
 
             ManualResetEvent extensionDisposedEvent = new(false);
