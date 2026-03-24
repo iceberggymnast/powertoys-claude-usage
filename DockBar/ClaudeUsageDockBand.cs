@@ -31,14 +31,14 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
     {
         _sessionItem = new ListItem(new NoOpCommand())
         {
-            Title    = "–",
-            Subtitle = "Session · Loading…",
+            Title    = "Session –",
+            Subtitle = "Loading…",
             Icon     = new IconInfo("⚡"),
         };
         _weeklyItem = new ListItem(new NoOpCommand())
         {
-            Title    = "–",
-            Subtitle = "Weekly · Loading…",
+            Title    = "Weekly –",
+            Subtitle = "Loading…",
             Icon     = new IconInfo("📅"),
         };
 
@@ -93,22 +93,22 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
     private void SetNoToken()
     {
         const string msg = "Claude Code not logged in";
-        _sessionItem.Title    = "–";
-        _sessionItem.Subtitle = $"Session · {msg}";
-        _weeklyItem.Title     = "–";
-        _weeklyItem.Subtitle  = $"Weekly · {msg}";
-        SetDetails(_sessionItem, "–", $"Session · {msg}");
-        SetDetails(_weeklyItem,  "–", $"Weekly · {msg}");
+        _sessionItem.Title    = "Session –";
+        _sessionItem.Subtitle = msg;
+        _weeklyItem.Title     = "Weekly –";
+        _weeklyItem.Subtitle  = msg;
+        SetDetails(_sessionItem, "Session –", msg);
+        SetDetails(_weeklyItem,  "Weekly –",  msg);
     }
 
     private void SetError(string error)
     {
-        _sessionItem.Title    = "–";
-        _sessionItem.Subtitle = $"Session · {error}";
-        _weeklyItem.Title     = "–";
-        _weeklyItem.Subtitle  = $"Weekly · {error}";
-        SetDetails(_sessionItem, "–", $"Session · {error}");
-        SetDetails(_weeklyItem,  "–", $"Weekly · {error}");
+        _sessionItem.Title    = "Session –";
+        _sessionItem.Subtitle = error;
+        _weeklyItem.Title     = "Weekly –";
+        _weeklyItem.Subtitle  = error;
+        SetDetails(_sessionItem, "Session –", error);
+        SetDetails(_weeklyItem,  "Weekly –",  error);
     }
 
     private void UpdateDisplay()
@@ -120,10 +120,10 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
         string weeklyReset  = FormatTimeSpan(_cached.SevenDayReset.ToUniversalTime()  - DateTime.UtcNow);
         string errSuffix    = _isStale && _lastError is not null ? $" ({_lastError})" : string.Empty;
 
-        string sessionTitle    = $"{_cached.FiveHourPct:0}%";
-        string sessionSubtitle = $"Session · resets in {sessionReset}{errSuffix}";
-        string weeklyTitle     = $"{_cached.SevenDayPct:0}%";
-        string weeklySubtitle  = $"Weekly · resets in {weeklyReset}{errSuffix}";
+        string sessionTitle    = $"Session {_cached.FiveHourPct:0}%";
+        string sessionSubtitle = $"resets in {sessionReset}{errSuffix}";
+        string weeklyTitle     = $"Weekly {_cached.SevenDayPct:0}%";
+        string weeklySubtitle  = $"resets in {weeklyReset}{errSuffix}";
 
         _sessionItem.Title    = sessionTitle;
         _sessionItem.Subtitle = sessionSubtitle;
