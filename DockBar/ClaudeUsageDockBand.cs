@@ -103,12 +103,12 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
 
     private void SetError(string error)
     {
-        _sessionItem.Title    = "Session";
-        _sessionItem.Subtitle = error;
-        _weeklyItem.Title     = "Weekly";
-        _weeklyItem.Subtitle  = error;
-        SetDetails(_sessionItem, "Session", error);
-        SetDetails(_weeklyItem,  "Weekly",  error);
+        _sessionItem.Title    = "–";
+        _sessionItem.Subtitle = $"Session · {error}";
+        _weeklyItem.Title     = "–";
+        _weeklyItem.Subtitle  = $"Weekly · {error}";
+        SetDetails(_sessionItem, "–", $"Session · {error}");
+        SetDetails(_weeklyItem,  "–", $"Weekly · {error}");
     }
 
     private void UpdateDisplay()
