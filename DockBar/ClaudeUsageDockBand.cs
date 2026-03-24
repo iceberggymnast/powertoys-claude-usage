@@ -10,12 +10,15 @@ namespace DockBar;
 
 /// <summary>
 /// A Dock band that displays Claude 5-hour session and 7-day weekly usage.
-/// Updates every 60 seconds. Shows stale data (with a trailing "·") on HTTP 429.
+/// Polls every 5 minutes. Manual refresh button with 1-minute cooldown.
+/// Shows stale data (with error suffix) when API call fails.
 /// </summary>
 internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
 {
     private readonly ListItem _sessionItem;
     private readonly ListItem _weeklyItem;
+    private readonly ListItem _refreshItem;
+    private readonly RefreshCommand _refreshCommand;
 
     private UsageData? _cached;
     private bool _isStale;
@@ -26,31 +29,42 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
     public ClaudeUsageDockBand()
         : base([], "com.dockbar.claude.usage", "Claude Usage")
     {
-        _sessionItem = new ListItem(new NoOpCommand()) { Title = "Session –", Subtitle = "Loading…", Icon = new IconInfo("⚡") };
-        _weeklyItem  = new ListItem(new NoOpCommand()) { Title = "Weekly –",  Subtitle = "Loading…", Icon = new IconInfo("📅") };
+        _sessionItem = new ListItem(new NoOpCommand())
+        {
+            Title    = "–",
+            Subtitle = "Session · Loading…",
+            Icon     = new IconInfo("⚡"),
+        };
+        _weeklyItem = new ListItem(new NoOpCommand())
+        {
+            Title    = "–",
+            Subtitle = "Weekly · Loading…",
+            Icon     = new IconInfo("📅"),
+        };
 
-        Items = [_sessionItem, _weeklyItem];
+        _refreshCommand = new RefreshCommand(this);
+        _refreshItem = new ListItem(_refreshCommand)
+        {
+            Title    = "↻",
+            Subtitle = "Refresh",
+            Icon     = new IconInfo("↻"),
+        };
 
-        // Fire immediately (dueTime=0), then repeat every 60 s
-        _timer = new Timer(OnTimer, null, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+        Items = [_sessionItem, _weeklyItem, _refreshItem];
+
+        // Fire immediately, then repeat every 5 minutes
+        _timer = new Timer(OnTimer, null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
     }
 
-    private void OnTimer(object? _)
-    {
-        // Fire-and-forget; exceptions are swallowed to keep the timer alive
-        _ = RefreshAsync();
-    }
+    private void OnTimer(object? _) => _ = RefreshAsync();
 
-    private async Task RefreshAsync()
+    internal async Task RefreshAsync()
     {
         string? token = CredentialHelper.GetClaudeAccessToken();
 
         if (token is null)
         {
-            _sessionItem.Title    = "Session –";
-            _sessionItem.Subtitle = "Claude Code not logged in";
-            _weeklyItem.Title     = "Weekly –";
-            _weeklyItem.Subtitle  = "Claude Code not logged in";
+            SetNoToken();
             return;
         }
 
@@ -58,9 +72,9 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
 
         if (result.Data is not null)
         {
-            _cached     = result.Data;
-            _isStale    = false;
-            _lastError  = null;
+            _cached    = result.Data;
+            _isStale   = false;
+            _lastError = null;
         }
         else if (_cached is not null)
         {
@@ -69,16 +83,32 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
         }
         else
         {
-            // No cache yet — show specific error
-            string err = result.Error ?? "Unknown error";
-            _sessionItem.Title    = "Session";
-            _sessionItem.Subtitle = err;
-            _weeklyItem.Title     = "Weekly";
-            _weeklyItem.Subtitle  = err;
+            SetError(result.Error ?? "Unknown error");
             return;
         }
 
         UpdateDisplay();
+    }
+
+    private void SetNoToken()
+    {
+        const string msg = "Claude Code not logged in";
+        _sessionItem.Title    = "–";
+        _sessionItem.Subtitle = $"Session · {msg}";
+        _weeklyItem.Title     = "–";
+        _weeklyItem.Subtitle  = $"Weekly · {msg}";
+        SetDetails(_sessionItem, "–", $"Session · {msg}");
+        SetDetails(_weeklyItem,  "–", $"Weekly · {msg}");
+    }
+
+    private void SetError(string error)
+    {
+        _sessionItem.Title    = "Session";
+        _sessionItem.Subtitle = error;
+        _weeklyItem.Title     = "Weekly";
+        _weeklyItem.Subtitle  = error;
+        SetDetails(_sessionItem, "Session", error);
+        SetDetails(_weeklyItem,  "Weekly",  error);
     }
 
     private void UpdateDisplay()
@@ -88,13 +118,31 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
 
         string sessionReset = FormatTimeSpan(_cached.FiveHourReset.ToUniversalTime() - DateTime.UtcNow);
         string weeklyReset  = FormatTimeSpan(_cached.SevenDayReset.ToUniversalTime()  - DateTime.UtcNow);
-        string staleSuffix  = _isStale && _lastError is not null ? $" ({_lastError})" : string.Empty;
+        string errSuffix    = _isStale && _lastError is not null ? $" ({_lastError})" : string.Empty;
 
-        _sessionItem.Title    = $"Session {_cached.FiveHourPct:0}%";
-        _sessionItem.Subtitle = $"resets in {sessionReset}{staleSuffix}";
+        string sessionTitle    = $"{_cached.FiveHourPct:0}%";
+        string sessionSubtitle = $"Session · resets in {sessionReset}{errSuffix}";
+        string weeklyTitle     = $"{_cached.SevenDayPct:0}%";
+        string weeklySubtitle  = $"Weekly · resets in {weeklyReset}{errSuffix}";
 
-        _weeklyItem.Title    = $"Weekly {_cached.SevenDayPct:0}%";
-        _weeklyItem.Subtitle = $"resets in {weeklyReset}{staleSuffix}";
+        _sessionItem.Title    = sessionTitle;
+        _sessionItem.Subtitle = sessionSubtitle;
+        _weeklyItem.Title     = weeklyTitle;
+        _weeklyItem.Subtitle  = weeklySubtitle;
+
+        // Update hover details with full untruncated text
+        SetDetails(_sessionItem, sessionTitle, sessionSubtitle);
+        SetDetails(_weeklyItem,  weeklyTitle,  weeklySubtitle);
+    }
+
+    internal void SetRefreshStatus(string subtitle)
+    {
+        _refreshItem.Subtitle = subtitle;
+    }
+
+    private static void SetDetails(ListItem item, string title, string body)
+    {
+        item.Details = new Details { Title = title, Body = body };
     }
 
     private static string FormatTimeSpan(TimeSpan ts)
