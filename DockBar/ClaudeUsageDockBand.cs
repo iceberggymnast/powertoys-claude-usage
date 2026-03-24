@@ -19,6 +19,7 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
 
     private UsageData? _cached;
     private bool _isStale;
+    private string? _lastError;
 
     private readonly Timer _timer;
 
@@ -53,41 +54,28 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
             return;
         }
 
-        try
-        {
-            UsageData? data = await ClaudeUsageService.FetchAsync(token).ConfigureAwait(false);
+        FetchResult result = await ClaudeUsageService.FetchAsync(token).ConfigureAwait(false);
 
-            if (data is not null)
-            {
-                _cached  = data;
-                _isStale = false;
-            }
-            else if (_cached is not null)
-            {
-                // null means 429 / transient error — keep existing cache, mark stale
-                _isStale = true;
-            }
-            else
-            {
-                // No cache yet, nothing to show
-                _sessionItem.Title    = "Session –";
-                _sessionItem.Subtitle = "Unable to fetch usage";
-                _weeklyItem.Title     = "Weekly –";
-                _weeklyItem.Subtitle  = "Unable to fetch usage";
-                return;
-            }
-        }
-        catch
+        if (result.Data is not null)
         {
-            if (_cached is null)
-            {
-                _sessionItem.Title    = "Session –";
-                _sessionItem.Subtitle = "Unable to fetch usage";
-                _weeklyItem.Title     = "Weekly –";
-                _weeklyItem.Subtitle  = "Unable to fetch usage";
-                return;
-            }
-            _isStale = true;
+            _cached     = result.Data;
+            _isStale    = false;
+            _lastError  = null;
+        }
+        else if (_cached is not null)
+        {
+            _isStale   = true;
+            _lastError = result.Error;
+        }
+        else
+        {
+            // No cache yet — show specific error
+            string err = result.Error ?? "Unknown error";
+            _sessionItem.Title    = "⚡ Session";
+            _sessionItem.Subtitle = err;
+            _weeklyItem.Title     = "📅 Weekly";
+            _weeklyItem.Subtitle  = err;
+            return;
         }
 
         UpdateDisplay();
@@ -98,15 +86,15 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
         if (_cached is null)
             return;
 
-        string staleSuffix  = _isStale ? " ·" : string.Empty;
         string sessionReset = FormatTimeSpan(_cached.FiveHourReset.ToUniversalTime() - DateTime.UtcNow);
         string weeklyReset  = FormatTimeSpan(_cached.SevenDayReset.ToUniversalTime()  - DateTime.UtcNow);
+        string staleSuffix  = _isStale && _lastError is not null ? $" ({_lastError})" : string.Empty;
 
-        _sessionItem.Title    = $"Session {_cached.FiveHourPct:0}%{staleSuffix}";
-        _sessionItem.Subtitle = $"resets in {sessionReset}";
+        _sessionItem.Title    = $"Session {_cached.FiveHourPct:0}%";
+        _sessionItem.Subtitle = $"resets in {sessionReset}{staleSuffix}";
 
-        _weeklyItem.Title    = $"Weekly {_cached.SevenDayPct:0}%{staleSuffix}";
-        _weeklyItem.Subtitle = $"resets in {weeklyReset}";
+        _weeklyItem.Title    = $"Weekly {_cached.SevenDayPct:0}%";
+        _weeklyItem.Subtitle = $"resets in {weeklyReset}{staleSuffix}";
     }
 
     private static string FormatTimeSpan(TimeSpan ts)
