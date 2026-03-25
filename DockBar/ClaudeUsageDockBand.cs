@@ -23,6 +23,10 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
     private UsageData? _cached;
     private bool _isStale;
     private string? _lastError;
+    private int _failureCount;
+
+    private static readonly TimeSpan BaseInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MaxInterval  = TimeSpan.FromMinutes(60);
 
     private readonly Timer _timer;
 
@@ -52,19 +56,20 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
 
         Items = [_sessionItem, _weeklyItem, _refreshItem];
 
-        // Fire immediately, then repeat every 5 minutes
-        _timer = new Timer(OnTimer, null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
+        // Fire immediately; period is Infinite — rescheduled dynamically after each result
+        _timer = new Timer(OnTimer, null, TimeSpan.Zero, Timeout.InfiniteTimeSpan);
     }
 
-    private void OnTimer(object? _) => _ = RefreshAsync();
+    private void OnTimer(object? _) => _ = RefreshAsync(isManual: false);
 
-    internal async Task RefreshAsync()
+    internal async Task RefreshAsync(bool isManual = false)
     {
         string? token = CredentialHelper.GetClaudeAccessToken();
 
         if (token is null)
         {
             SetNoToken();
+            if (!isManual) ScheduleNext(is429: false);
             return;
         }
 
@@ -75,19 +80,41 @@ internal sealed partial class ClaudeUsageDockBand : WrappedDockItem
             _cached    = result.Data;
             _isStale   = false;
             _lastError = null;
+            ScheduleNext(is429: false);
         }
         else if (_cached is not null)
         {
             _isStale   = true;
             _lastError = result.Error;
+            ScheduleNext(is429: result.Is429);
         }
         else
         {
             SetError(result.Error ?? "Unknown error");
+            ScheduleNext(is429: result.Is429);
             return;
         }
 
         UpdateDisplay();
+    }
+
+    private void ScheduleNext(bool is429)
+    {
+        TimeSpan delay;
+        if (is429)
+        {
+            _failureCount++;
+            double minutes = Math.Min(5 * Math.Pow(2, _failureCount - 1), MaxInterval.TotalMinutes);
+            delay = TimeSpan.FromMinutes(minutes);
+            _refreshItem.Subtitle = $"Retry in {(int)delay.TotalMinutes}m";
+        }
+        else
+        {
+            _failureCount = 0;
+            delay = BaseInterval;
+            _refreshItem.Subtitle = "Refresh";
+        }
+        _timer.Change(delay, Timeout.InfiniteTimeSpan);
     }
 
     private void SetNoToken()

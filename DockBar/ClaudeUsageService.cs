@@ -15,7 +15,7 @@ internal record UsageData(
     double SevenDayPct,
     DateTime SevenDayReset);
 
-internal record FetchResult(UsageData? Data, string? Error);
+internal record FetchResult(UsageData? Data, string? Error, bool Is429 = false);
 
 internal static class ClaudeUsageService
 {
@@ -38,10 +38,11 @@ internal static class ClaudeUsageService
             return new FetchResult(null, $"Network error: {ex.Message.Split('.')[0]}");
         }
 
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            return new FetchResult(null, "HTTP 429", Is429: true);
+
         if (!response.IsSuccessStatusCode)
-        {
             return new FetchResult(null, $"HTTP {(int)response.StatusCode}");
-        }
 
         try
         {
