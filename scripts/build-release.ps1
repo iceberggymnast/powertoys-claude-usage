@@ -1,27 +1,33 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds DockBar Release/x64 and packages release artifacts into the release/ folder.
+    Builds DockBar Release/x64, packages artifacts, and optionally publishes a GitHub Release.
 
 .DESCRIPTION
     1. Builds DockBar.csproj (Release / x64)
     2. Exports the signing certificate as DockBar.cer
     3. Copies DockBar.msix to release/
     4. Generates release/install.ps1 for end-user installation
+    5. Optionally creates a GitHub Release and uploads the files (requires gh CLI)
+
+.PARAMETER Version
+    Tag name for the GitHub Release (e.g. "v1.0.3").
+    If omitted, artifacts are built locally but not published.
 
 .PARAMETER PfxPassword
     Password for DockBar_TemporaryKey.pfx. Defaults to empty string (no password).
 #>
 [CmdletBinding()]
 param(
+    [string]$Version    = "",
     [string]$PfxPassword = ""
 )
 
 $ErrorActionPreference = 'Stop'
 
-$root      = Split-Path $PSScriptRoot -Parent
-$projFile  = Join-Path $root "DockBar\DockBar.csproj"
-$pfxFile   = Join-Path $root "DockBar\DockBar_TemporaryKey.pfx"
+$root       = Split-Path $PSScriptRoot -Parent
+$projFile   = Join-Path $root "DockBar\DockBar.csproj"
+$pfxFile    = Join-Path $root "DockBar\DockBar_TemporaryKey.pfx"
 $releaseDir = Join-Path $root "release"
 
 # ---------------------------------------------------------------------------
@@ -45,7 +51,6 @@ if (Test-Path $vswhere) {
 }
 
 if (-not $msbuild -or -not (Test-Path $msbuild)) {
-    # Fallback to well-known VS 2022 Community path
     $fallback = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
     if (Test-Path $fallback) {
         $msbuild = $fallback
@@ -56,16 +61,7 @@ if (-not $msbuild -or -not (Test-Path $msbuild)) {
 Write-Host "Using MSBuild: $msbuild"
 
 # ---------------------------------------------------------------------------
-# 3. NuGet restore
-# ---------------------------------------------------------------------------
-Write-Host "`nRestoring NuGet packages..."
-dotnet restore $projFile
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet restore failed with exit code $LASTEXITCODE."
-}
-
-# ---------------------------------------------------------------------------
-# 4. Build Release / x64
+# 3. Build Release / x64
 # ---------------------------------------------------------------------------
 Write-Host "`nBuilding DockBar (Release / x64)..."
 & $msbuild $projFile /p:Configuration=Release /p:Platform=x64 /t:Build /v:minimal
@@ -75,7 +71,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Build succeeded."
 
 # ---------------------------------------------------------------------------
-# 5. Find the .msix output
+# 4. Find the .msix output
 # ---------------------------------------------------------------------------
 $msixSearch = Join-Path $root "DockBar\bin\x64\Release"
 $msixFiles  = Get-ChildItem -Path $msixSearch -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue
@@ -91,7 +87,7 @@ Copy-Item $msixFile.FullName (Join-Path $releaseDir "DockBar.msix")
 Write-Host "Copied -> release\DockBar.msix"
 
 # ---------------------------------------------------------------------------
-# 6. Export .cer (public key only) from the PFX
+# 5. Export .cer (public key only) from the PFX
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $pfxFile)) {
     throw "PFX not found: $pfxFile"
@@ -114,7 +110,7 @@ Export-Certificate -Cert $cert -FilePath $cerPath -Type CERT | Out-Null
 Write-Host "Exported -> release\DockBar.cer  (Subject: $($cert.Subject))"
 
 # ---------------------------------------------------------------------------
-# 7. Generate release/install.ps1
+# 6. Generate release/install.ps1
 # ---------------------------------------------------------------------------
 $installScript = @'
 #Requires -Version 5.1
@@ -184,8 +180,48 @@ Set-Content -Path $installPath -Value $installScript -Encoding UTF8
 Write-Host "Generated -> release\install.ps1"
 
 # ---------------------------------------------------------------------------
-# Done
+# Done — local artifacts
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "=== Release artifacts ready ===" -ForegroundColor Green
 Get-ChildItem $releaseDir | Format-Table Name, Length, LastWriteTime -AutoSize
+
+# ---------------------------------------------------------------------------
+# 7. (Optional) Publish GitHub Release via gh CLI
+# ---------------------------------------------------------------------------
+if (-not $Version) {
+    Write-Host "No -Version specified. Skipping GitHub Release upload." -ForegroundColor Yellow
+    Write-Host "To publish: .\scripts\build-release.ps1 -Version v1.0.3"
+    exit 0
+}
+
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    throw "gh CLI not found. Install from https://cli.github.com/ or omit -Version to skip upload."
+}
+
+Write-Host "`nPublishing GitHub Release $Version ..."
+
+# Create git tag if it doesn't exist
+$existingTag = git tag -l $Version
+if (-not $existingTag) {
+    Write-Host "Creating tag $Version ..."
+    git tag $Version
+    git push origin $Version
+} else {
+    Write-Host "Tag $Version already exists."
+}
+
+# Create release and upload files
+gh release create $Version `
+    "$releaseDir\DockBar.msix" `
+    "$releaseDir\DockBar.cer" `
+    "$releaseDir\install.ps1" `
+    --title $Version `
+    --generate-notes
+
+if ($LASTEXITCODE -ne 0) {
+    throw "gh release create failed."
+}
+
+Write-Host ""
+Write-Host "GitHub Release $Version published!" -ForegroundColor Green
