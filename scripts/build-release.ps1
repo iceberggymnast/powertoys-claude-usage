@@ -56,7 +56,16 @@ if (-not $msbuild -or -not (Test-Path $msbuild)) {
 Write-Host "Using MSBuild: $msbuild"
 
 # ---------------------------------------------------------------------------
-# 3. Build Release / x64
+# 3. NuGet restore
+# ---------------------------------------------------------------------------
+Write-Host "`nRestoring NuGet packages..."
+dotnet restore $projFile
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet restore failed with exit code $LASTEXITCODE."
+}
+
+# ---------------------------------------------------------------------------
+# 4. Build Release / x64
 # ---------------------------------------------------------------------------
 Write-Host "`nBuilding DockBar (Release / x64)..."
 & $msbuild $projFile /p:Configuration=Release /p:Platform=x64 /t:Build /v:minimal
@@ -66,7 +75,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Build succeeded."
 
 # ---------------------------------------------------------------------------
-# 4. Find the .msix output
+# 5. Find the .msix output
 # ---------------------------------------------------------------------------
 $msixSearch = Join-Path $root "DockBar\bin\x64\Release"
 $msixFiles  = Get-ChildItem -Path $msixSearch -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue
@@ -82,7 +91,7 @@ Copy-Item $msixFile.FullName (Join-Path $releaseDir "DockBar.msix")
 Write-Host "Copied -> release\DockBar.msix"
 
 # ---------------------------------------------------------------------------
-# 5. Export .cer (public key only) from the PFX
+# 6. Export .cer (public key only) from the PFX
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $pfxFile)) {
     throw "PFX not found: $pfxFile"
@@ -105,7 +114,7 @@ Export-Certificate -Cert $cert -FilePath $cerPath -Type CERT | Out-Null
 Write-Host "Exported -> release\DockBar.cer  (Subject: $($cert.Subject))"
 
 # ---------------------------------------------------------------------------
-# 6. Generate release/install.ps1
+# 7. Generate release/install.ps1
 # ---------------------------------------------------------------------------
 $installScript = @'
 #Requires -Version 5.1
