@@ -19,25 +19,38 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Ensure UAP Platform.xml 10.0.22000.0
-        shell: pwsh
+      - name: Ensure Windows SDK 10.0.22000.0 stubs
+        shell: cmd
         run: |
-          $uapBase  = "C:\Program Files (x86)\Windows Kits\10\Platforms\UAP"
-          $target   = "$uapBase\10.0.22000.0"
-          if (Test-Path $target) {
-            Write-Host "UAP 10.0.22000.0 already present"
-          } else {
-            $src = Get-ChildItem $uapBase -Directory -ErrorAction SilentlyContinue |
-                   Sort-Object Name -Descending | Select-Object -First 1
-            if ($src) {
-              Write-Host "Copying $($src.Name) -> 10.0.22000.0"
-              Copy-Item $src.FullName $target -Recurse
-            } else {
-              Write-Host "No UAP dir found under $uapBase — listing Windows Kits:"
-              Get-ChildItem "C:\Program Files (x86)\Windows Kits\10" -Directory | Format-Table Name
-              throw "Cannot find any UAP Platform.xml to use"
-            }
-          }
+          @echo off
+          setlocal
+          set KITS=C:\Program Files (x86)\Windows Kits\10
+
+          :: --- UAP Platform.xml ---
+          if exist "%KITS%\Platforms\UAP\10.0.22000.0" (
+            echo UAP 10.0.22000.0 already present
+          ) else (
+            for /f "tokens=*" %%D in ('dir /b /ad /on "%KITS%\Platforms\UAP" 2^>nul') do set UAPSRC=%%D
+            if defined UAPSRC (
+              echo Linking UAP %UAPSRC% -^> 10.0.22000.0
+              mklink /J "%KITS%\Platforms\UAP\10.0.22000.0" "%KITS%\Platforms\UAP\%UAPSRC%"
+            ) else (
+              echo ERROR: No UAP directory found & exit /b 1
+            )
+          )
+
+          :: --- WinMD References ---
+          if exist "%KITS%\References\10.0.22000.0" (
+            echo References 10.0.22000.0 already present
+          ) else (
+            for /f "tokens=*" %%D in ('dir /b /ad /on "%KITS%\References" 2^>nul') do set REFSRC=%%D
+            if defined REFSRC (
+              echo Linking References %REFSRC% -^> 10.0.22000.0
+              mklink /J "%KITS%\References\10.0.22000.0" "%KITS%\References\%REFSRC%"
+            ) else (
+              echo ERROR: No References directory found & exit /b 1
+            )
+          )
 
       - name: Build release artifacts
         shell: pwsh
