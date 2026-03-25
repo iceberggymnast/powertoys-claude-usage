@@ -71,20 +71,40 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Build succeeded."
 
 # ---------------------------------------------------------------------------
-# 4. Find the .msix output
+# 4. Pack .msix with makeappx.exe + sign with signtool.exe
 # ---------------------------------------------------------------------------
-$msixSearch = Join-Path $root "DockBar\bin\x64\Release"
-$msixFiles  = Get-ChildItem -Path $msixSearch -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue
+$buildOut = Join-Path $root "DockBar\bin\x64\Release\net9.0-windows10.0.22000.0\win-x64"
+$msixOut  = Join-Path $releaseDir "DockBar.msix"
 
-if ($msixFiles.Count -eq 0) {
-    throw "No .msix file found under $msixSearch after build."
-}
+# Find makeappx.exe (prefer highest SDK version, x64)
+$makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+    -Filter "makeappx.exe" -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -match '\\x64\\' } |
+    Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
 
-$msixFile = $msixFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-Write-Host "Found MSIX: $($msixFile.FullName)"
+if (-not $makeappx) { throw "makeappx.exe not found. Install Windows SDK." }
+Write-Host "Using makeappx: $makeappx"
 
-Copy-Item $msixFile.FullName (Join-Path $releaseDir "DockBar.msix")
-Write-Host "Copied -> release\DockBar.msix"
+# Find signtool.exe
+$signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+    -Filter "signtool.exe" -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -match '\\x64\\' } |
+    Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+
+if (-not $signtool) { throw "signtool.exe not found. Install Windows SDK." }
+Write-Host "Using signtool: $signtool"
+
+# Pack
+Write-Host "`nPacking MSIX..."
+& $makeappx pack /d $buildOut /p $msixOut /o /v
+if ($LASTEXITCODE -ne 0) { throw "makeappx failed with exit code $LASTEXITCODE." }
+
+# Sign
+Write-Host "Signing MSIX..."
+& $signtool sign /fd SHA256 /a /f $pfxFile /p $PfxPassword $msixOut
+if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE." }
+
+Write-Host "Packed + signed -> release\DockBar.msix"
 
 # ---------------------------------------------------------------------------
 # 5. Export .cer (public key only) from the PFX
