@@ -19,20 +19,25 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Windows 10 SDK 22000 (UAP)
+      - name: Ensure UAP Platform.xml 10.0.22000.0
         shell: pwsh
         run: |
-          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          $vsPath    = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
-          Write-Host "Installing Windows10SDK.22000 component..."
-          $p = Start-Process $installer -ArgumentList @(
-            'modify', '--installPath', $vsPath,
-            '--add', 'Microsoft.VisualStudio.Component.Windows10SDK.22000',
-            '--quiet', '--norestart', '--force'
-          ) -Wait -PassThru -NoNewWindow
-          Write-Host "Exit code: $($p.ExitCode)"
-          # 0 = success, 3010 = success + reboot needed — both are fine
-          if ($p.ExitCode -notin @(0, 3010)) { exit $p.ExitCode }
+          $uapBase  = "C:\Program Files (x86)\Windows Kits\10\Platforms\UAP"
+          $target   = "$uapBase\10.0.22000.0"
+          if (Test-Path $target) {
+            Write-Host "UAP 10.0.22000.0 already present"
+          } else {
+            $src = Get-ChildItem $uapBase -Directory -ErrorAction SilentlyContinue |
+                   Sort-Object Name -Descending | Select-Object -First 1
+            if ($src) {
+              Write-Host "Copying $($src.Name) -> 10.0.22000.0"
+              Copy-Item $src.FullName $target -Recurse
+            } else {
+              Write-Host "No UAP dir found under $uapBase — listing Windows Kits:"
+              Get-ChildItem "C:\Program Files (x86)\Windows Kits\10" -Directory | Format-Table Name
+              throw "Cannot find any UAP Platform.xml to use"
+            }
+          }
 
       - name: Build release artifacts
         shell: pwsh
